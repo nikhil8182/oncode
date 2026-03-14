@@ -75,6 +75,7 @@ export default function ChatInput({ onSend, disabled, isStreaming }: ChatInputPr
 
       {/* Textarea */}
       <textarea
+        id="chat-input"
         ref={textareaRef}
         value={value}
         onChange={(e) => {

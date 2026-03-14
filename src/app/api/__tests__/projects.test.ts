@@ -15,18 +15,43 @@ vi.mock("os", () => ({
   homedir: vi.fn(() => "/mock/home"),
 }));
 
-// Mock next/server
-vi.mock("next/server", () => ({
-  NextResponse: {
-    json: vi.fn((data: unknown, init?: { status?: number }) => ({
-      data,
-      status: init?.status || 200,
-    })),
-  },
+// Mock api-auth to always pass authentication
+vi.mock("@/lib/api-auth", () => ({
+  validateAuth: vi.fn(() => true),
+  unauthorizedResponse: vi.fn(() => ({
+    data: { error: "Unauthorized" },
+    status: 401,
+  })),
 }));
+
+// Mock next/server with headers support
+vi.mock("next/server", () => {
+  class MockNextRequest {
+    nextUrl: URL;
+    headers: Map<string, string>;
+    constructor(url: string) {
+      this.nextUrl = new URL(url, "http://localhost:3000");
+      this.headers = new Map();
+    }
+  }
+  return {
+    NextRequest: MockNextRequest,
+    NextResponse: {
+      json: vi.fn((data: unknown, init?: { status?: number }) => ({
+        data,
+        status: init?.status || 200,
+      })),
+    },
+  };
+});
 
 // Import the route handler after mocks are set up
 import { GET } from "../../api/projects/route";
+import { NextRequest } from "next/server";
+
+function createRequest(url = "http://localhost:3000/api/projects") {
+  return new NextRequest(url);
+}
 
 describe("GET /api/projects", () => {
   beforeEach(() => {
@@ -64,7 +89,7 @@ describe("GET /api/projects", () => {
       return { mtimeMs: 2000 } as fs.Stats;
     });
 
-    const response = (await GET()) as { data: unknown; status: number };
+    const response = (await GET(createRequest())) as { data: unknown; status: number };
     const projects = response.data as Array<{ name: string; path: string }>;
 
     expect(response.status).toBe(200);
@@ -77,7 +102,7 @@ describe("GET /api/projects", () => {
   it("returns an empty array when no projects are found", async () => {
     vi.mocked(fs.promises.readdir).mockResolvedValue([]);
 
-    const response = (await GET()) as { data: unknown; status: number };
+    const response = (await GET(createRequest())) as { data: unknown; status: number };
     const projects = response.data as unknown[];
 
     expect(response.status).toBe(200);
@@ -91,7 +116,7 @@ describe("GET /api/projects", () => {
       { name: ".ssh", isDirectory: () => true, isFile: () => false },
     ] as unknown as fs.Dirent[]);
 
-    const response = (await GET()) as { data: unknown; status: number };
+    const response = (await GET(createRequest())) as { data: unknown; status: number };
     const projects = response.data as unknown[];
 
     expect(response.status).toBe(200);
@@ -105,7 +130,7 @@ describe("GET /api/projects", () => {
       new Error("Permission denied")
     );
 
-    const response = (await GET()) as { data: unknown; status: number };
+    const response = (await GET(createRequest())) as { data: unknown; status: number };
 
     expect(response.status).toBe(500);
     expect((response.data as { error: string }).error).toBe(

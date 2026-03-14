@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { validateAuth, unauthorizedResponse } from "@/lib/api-auth";
 
 const execAsync = promisify(exec);
 
@@ -13,6 +14,10 @@ const execAsync = promisify(exec);
  * Returns: { success: boolean, message: string, model?: string }
  */
 export async function POST(request: NextRequest) {
+  if (!validateAuth(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const body = await request.json();
     const { provider, apiKey, sessionKey } = body;

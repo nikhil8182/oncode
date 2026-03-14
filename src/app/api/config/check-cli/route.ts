@@ -1,10 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { validateAuth, unauthorizedResponse } from "@/lib/api-auth";
 
 const execAsync = promisify(exec);
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  if (!validateAuth(request)) {
+    return unauthorizedResponse();
+  }
   try {
     // Check if claude CLI is available
     const { stdout: whichOutput } = await execAsync("which claude");

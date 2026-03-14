@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import type { FileNode } from "@/types";
+import { validateAuth, unauthorizedResponse } from "@/lib/api-auth";
 
 // Directories to skip when building the file tree
 const SKIP_DIRS = new Set([
@@ -69,6 +70,10 @@ async function buildFileTree(dirPath: string, depth: number): Promise<FileNode[]
 }
 
 export async function GET(request: NextRequest) {
+  if (!validateAuth(request)) {
+    return unauthorizedResponse();
+  }
+
   const searchParams = request.nextUrl.searchParams;
   const dirPath = searchParams.get("path");
 

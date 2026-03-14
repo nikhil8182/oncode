@@ -4,11 +4,16 @@ import {
   createConversation,
   saveConversation,
 } from "@/lib/conversations";
+import { validateAuth, unauthorizedResponse } from "@/lib/api-auth";
 
 /**
  * GET /api/conversations — list all conversations sorted by updatedAt desc.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  if (!validateAuth(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const conversations = await listConversations();
     return NextResponse.json(conversations);
@@ -24,6 +29,10 @@ export async function GET() {
  * Body: { projectPath: string }
  */
 export async function POST(request: NextRequest) {
+  if (!validateAuth(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const body = await request.json();
     const projectPath = body?.projectPath;

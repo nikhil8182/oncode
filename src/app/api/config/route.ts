@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { loadConfig, saveConfig, getMaskedConfig, isValidProvider } from "@/lib/config";
 import { PROVIDER_INFO } from "@/lib/providers";
 import type { ProviderType } from "@/lib/providers";
+import { validateAuth, unauthorizedResponse } from "@/lib/api-auth";
 
 /**
  * GET /api/config
  * Returns the current provider configuration with sensitive keys masked.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  if (!validateAuth(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const config = loadConfig();
     const masked = getMaskedConfig(config);
@@ -27,6 +32,10 @@ export async function GET() {
  * Body: { provider: ProviderType, apiKey?: string, sessionKey?: string }
  */
 export async function POST(request: NextRequest) {
+  if (!validateAuth(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const body = await request.json();
     const { provider, apiKey, sessionKey } = body;
@@ -95,6 +104,10 @@ export async function POST(request: NextRequest) {
  * Body: { provider?: ProviderType, apiKey?: string, sessionKey?: string }
  */
 export async function PUT(request: NextRequest) {
+  if (!validateAuth(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const body = await request.json();
     const existing = loadConfig();

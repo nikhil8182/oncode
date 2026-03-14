@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { Project } from "@/types";
+import { withAuthToken } from "@/lib/client-auth";
 
 interface ProjectPickerProps {
   selectedProject: Project | null;
@@ -14,20 +15,29 @@ export default function ProjectPicker({
 }: ProjectPickerProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    fetch("/api/projects")
-      .then((res) => res.json())
+    fetch(withAuthToken("/api/projects"))
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error("Failed to load projects");
+        }
+        return res.json();
+      })
       .then((data: Project[]) => {
         if (!cancelled) {
           setProjects(data);
           setLoading(false);
         }
       })
-      .catch(() => {
-        if (!cancelled) setLoading(false);
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load projects");
+          setLoading(false);
+        }
       });
 
     return () => {
@@ -68,6 +78,8 @@ export default function ProjectPicker({
               </div>
             ))}
           </>
+        ) : error ? (
+          <div className="panel-empty" style={{ color: "var(--danger)" }}>Failed to load projects</div>
         ) : projects.length === 0 ? (
           <div className="panel-empty">No projects found</div>
         ) : (

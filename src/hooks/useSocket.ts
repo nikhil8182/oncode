@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import type { Message, ToolCall, TerminalOutput, Conversation } from "@/types";
+import { getAuthToken, withAuthToken } from "@/lib/client-auth";
 
 interface UseSocketReturn {
   connected: boolean;
@@ -18,6 +19,9 @@ interface UseSocketReturn {
   newConversation: () => void;
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
 }
+
+const MAX_MESSAGES = 200;
+const MAX_TOOL_CALLS = 100;
 
 export function useSocket(): UseSocketReturn {
   const socketRef = useRef<Socket | null>(null);
@@ -35,9 +39,13 @@ export function useSocket(): UseSocketReturn {
   const activeConversationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // Read auth token from URL query parameter
+    const token = getAuthToken();
+
     const socket = io({
       path: "/socket.io",
       transports: ["websocket", "polling"],
+      auth: { token },
     });
 
     socketRef.current = socket;
@@ -84,7 +92,7 @@ export function useSocket(): UseSocketReturn {
         } else {
           // Create new assistant message
           streamingMessageIdRef.current = messageId;
-          return [
+          const next = [
             ...prev,
             {
               id: messageId,
@@ -93,6 +101,7 @@ export function useSocket(): UseSocketReturn {
               timestamp: Date.now(),
             },
           ];
+          return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next;
         }
       });
 
@@ -109,20 +118,26 @@ export function useSocket(): UseSocketReturn {
     socket.on("chat:error", (data: { error: string }) => {
       streamingMessageIdRef.current = null;
       setIsStreaming(false);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `error-${Date.now()}`,
-          role: "assistant" as const,
-          content: `**Error:** ${data.error}`,
-          timestamp: Date.now(),
-        },
-      ]);
+      setMessages((prev) => {
+        const next = [
+          ...prev,
+          {
+            id: `error-${Date.now()}`,
+            role: "assistant" as const,
+            content: `**Error:** ${data.error}`,
+            timestamp: Date.now(),
+          },
+        ];
+        return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next;
+      });
     });
 
     // Tool call started
     socket.on("tool:start", (data: ToolCall) => {
-      setToolCalls((prev) => [...prev, data]);
+      setToolCalls((prev) => {
+        const next = [...prev, data];
+        return next.length > MAX_TOOL_CALLS ? next.slice(-MAX_TOOL_CALLS) : next;
+      });
     });
 
     // Tool call ended
@@ -171,7 +186,10 @@ export function useSocket(): UseSocketReturn {
         timestamp: Date.now(),
       };
 
-      setMessages((prev) => [...prev, userMessage]);
+      setMessages((prev) => {
+        const next = [...prev, userMessage];
+        return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next;
+      });
 
       socketRef.current.emit("chat:message", {
         content: content.trim(),
@@ -185,7 +203,7 @@ export function useSocket(): UseSocketReturn {
   /** Load a conversation by ID from the REST API and set its messages. */
   const loadConversationById = useCallback(async (id: string) => {
     try {
-      const res = await fetch(`/api/conversations/${id}`);
+      const res = await fetch(withAuthToken(`/api/conversations/${id}`));
       if (!res.ok) return;
       const conv: Conversation = await res.json();
       setMessages(conv.messages);

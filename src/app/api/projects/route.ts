@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import type { Project } from "@/types";
+import { validateAuth, unauthorizedResponse } from "@/lib/api-auth";
 
 // Project marker files — if any of these exist in a directory, it's a project
 const PROJECT_MARKERS = [
@@ -13,7 +14,11 @@ const PROJECT_MARKERS = [
   ".git",
 ];
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  if (!validateAuth(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const homeDir = os.homedir();
     const entries = await fs.promises.readdir(homeDir, { withFileTypes: true });

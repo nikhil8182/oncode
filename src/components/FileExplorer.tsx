@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Folder, FolderOpen, File } from "lucide-react";
 import type { FileNode } from "@/types";
+import { withAuthToken } from "@/lib/client-auth";
 
 interface FileExplorerProps {
   projectPath: string;
@@ -134,6 +135,7 @@ function TreeNode({
 export default function FileExplorer({ projectPath, onFileSelect }: FileExplorerProps) {
   const [tree, setTree] = useState<FileNode[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
 
@@ -141,25 +143,37 @@ export default function FileExplorer({ projectPath, onFileSelect }: FileExplorer
     if (!projectPath) {
       setTree([]);
       setLoading(false);
+      setError(null);
       return;
     }
 
     let cancelled = false;
     setLoading(true);
     setTree([]);
+    setError(null);
     setSelectedPath(null);
     setExpandedPaths(new Set());
 
-    fetch(`/api/files?path=${encodeURIComponent(projectPath)}`)
-      .then((res) => res.json())
+    fetch(withAuthToken(`/api/files?path=${encodeURIComponent(projectPath)}`))
+      .then((res) => {
+        if (!res.ok) {
+          return res.json().then((data) => {
+            throw new Error(data.error || `Failed to load files (${res.status})`);
+          });
+        }
+        return res.json();
+      })
       .then((data: FileNode[]) => {
         if (!cancelled) {
           setTree(data);
           setLoading(false);
         }
       })
-      .catch(() => {
-        if (!cancelled) setLoading(false);
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load files");
+          setLoading(false);
+        }
       });
 
     return () => {
@@ -210,6 +224,8 @@ export default function FileExplorer({ projectPath, onFileSelect }: FileExplorer
             <SkeletonRow depth={0} />
             <SkeletonRow depth={1} />
           </>
+        ) : error ? (
+          <div className="panel-empty" style={{ color: "var(--danger)" }}>{error}</div>
         ) : tree.length === 0 ? (
           <div className="panel-empty">No files found</div>
         ) : (

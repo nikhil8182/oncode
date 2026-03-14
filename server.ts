@@ -9,6 +9,7 @@ import {
   saveConversation,
   loadConversation,
 } from "./src/lib/conversations";
+import { getOrCreateAuthToken, validateToken } from "./src/lib/auth";
 import type { ProviderConfig } from "./src/lib/providers";
 import type { ToolCall, TerminalOutput, Message } from "./src/types";
 
@@ -20,6 +21,9 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
+  // --- Auth token ---
+  const authToken = getOrCreateAuthToken();
+
   const httpServer = createServer((req, res) => {
     handle(req, res);
   });
@@ -33,6 +37,23 @@ app.prepare().then(() => {
     maxHttpBufferSize: 10 * 1024 * 1024,
   });
 
+  // --- Socket.io auth middleware ---
+  io.use((socket, next) => {
+    const token =
+      socket.handshake.auth?.token ||
+      socket.handshake.query?.token;
+
+    if (!token || typeof token !== "string") {
+      return next(new Error("Authentication required. Provide a valid auth token."));
+    }
+
+    if (!validateToken(token)) {
+      return next(new Error("Invalid auth token."));
+    }
+
+    next();
+  });
+
   // Track active conversation histories per socket
   const conversationHistories = new Map<
     string,
@@ -44,6 +65,12 @@ app.prepare().then(() => {
 
   // Track active AbortControllers per socket for CLI process cleanup
   const activeAbortControllers = new Map<string, AbortController>();
+
+  // --- Rate limiting ---
+  // Track message timestamps per socket for rate limiting (10 msgs/min)
+  const RATE_LIMIT_MAX = 10;
+  const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+  const messageTimestamps = new Map<string, number[]>();
 
   /**
    * Resolve the provider config for a given socket.
@@ -119,6 +146,36 @@ app.prepare().then(() => {
         projectPath: string;
         conversationId?: string;
       }) => {
+        // --- Input validation ---
+        if (!data || typeof data.content !== "string" || data.content.trim().length === 0) {
+          socket.emit("chat:error", { error: "Invalid input: content must be a non-empty string." });
+          return;
+        }
+        if (data.content.length > 10000) {
+          socket.emit("chat:error", { error: "Invalid input: content must not exceed 10000 characters." });
+          return;
+        }
+        if (data.projectPath !== undefined && data.projectPath !== null) {
+          if (typeof data.projectPath !== "string" || data.projectPath.trim().length === 0) {
+            socket.emit("chat:error", { error: "Invalid input: projectPath must be a non-empty string." });
+            return;
+          }
+        }
+
+        // --- Rate limiting ---
+        const now = Date.now();
+        const timestamps = messageTimestamps.get(socket.id) || [];
+        // Remove timestamps outside the window
+        const recentTimestamps = timestamps.filter(
+          (ts) => now - ts < RATE_LIMIT_WINDOW_MS
+        );
+        if (recentTimestamps.length >= RATE_LIMIT_MAX) {
+          socket.emit("chat:error", { error: "Rate limit exceeded. Please wait." });
+          return;
+        }
+        recentTimestamps.push(now);
+        messageTimestamps.set(socket.id, recentTimestamps);
+
         const { content, projectPath, conversationId } = data;
 
         const providerConfig = getProviderForSocket(socket.id);
@@ -293,6 +350,9 @@ app.prepare().then(() => {
 
       // Clean up provider overrides
       socketProviderOverrides.delete(socket.id);
+
+      // Clean up rate limiting data
+      messageTimestamps.delete(socket.id);
     });
   });
 
@@ -302,5 +362,7 @@ app.prepare().then(() => {
     console.log(`> Environment: ${dev ? "development" : "production"}`);
     const config = loadConfig();
     console.log(`> Default provider: ${config.provider}`);
+    console.log(`> Auth token: ${authToken}`);
+    console.log(`> Open: http://${hostname}:${port}?token=${authToken}`);
   });
 });

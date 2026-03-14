@@ -4,6 +4,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Oncode",
   description: "AI-powered coding assistant",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

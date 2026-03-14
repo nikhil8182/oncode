@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Loader2,
 } from "lucide-react";
+import { withAuthToken, authHeaders } from "@/lib/client-auth";
 
 type ProviderId = "claude-cli" | "api-key" | "max-api" | "session-key";
 
@@ -103,7 +104,7 @@ export default function Settings() {
   useEffect(() => {
     async function loadConfig() {
       try {
-        const res = await fetch("/api/config");
+        const res = await fetch(withAuthToken("/api/config"));
         if (res.ok) {
           const data = await res.json();
           setSelectedProvider(data.provider || "claude-cli");
@@ -125,7 +126,7 @@ export default function Settings() {
   useEffect(() => {
     async function checkCli() {
       try {
-        const res = await fetch("/api/config/check-cli");
+        const res = await fetch(withAuthToken("/api/config/check-cli"));
         if (res.ok) {
           const data = await res.json();
           setCliStatus({ available: data.available, version: data.version, loading: false });
@@ -150,9 +151,9 @@ export default function Settings() {
       if (apiKey) body.apiKey = apiKey;
       if (sessionKey) body.sessionKey = sessionKey;
 
-      const res = await fetch("/api/config", {
+      const res = await fetch(withAuthToken("/api/config"), {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(body),
       });
 
@@ -189,9 +190,9 @@ export default function Settings() {
       if (apiKey) body.apiKey = apiKey;
       if (sessionKey) body.sessionKey = sessionKey;
 
-      const res = await fetch("/api/config/test", {
+      const res = await fetch(withAuthToken("/api/config/test"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(body),
       });
 

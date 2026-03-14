@@ -6,6 +6,7 @@ import type { PanelId } from "@/app/page";
 interface SidebarProps {
   activePanel: PanelId;
   onPanelChange: (panel: PanelId) => void;
+  hasUnreadChat?: boolean;
 }
 
 interface SidebarItem {
@@ -25,7 +26,7 @@ const bottomItems: SidebarItem[] = [
   { id: "settings", icon: <Settings size={20} />, label: "Settings" },
 ];
 
-export default function Sidebar({ activePanel, onPanelChange }: SidebarProps) {
+export default function Sidebar({ activePanel, onPanelChange, hasUnreadChat }: SidebarProps) {
   return (
     <div
       style={{
@@ -70,6 +71,7 @@ export default function Sidebar({ activePanel, onPanelChange }: SidebarProps) {
           item={item}
           isActive={activePanel === item.id}
           onClick={() => onPanelChange(item.id)}
+          showDot={item.id === "chat" && !!hasUnreadChat}
         />
       ))}
 
@@ -93,10 +95,12 @@ function SidebarButton({
   item,
   isActive,
   onClick,
+  showDot,
 }: {
   item: SidebarItem;
   isActive: boolean;
   onClick: () => void;
+  showDot?: boolean;
 }) {
   return (
     <button
@@ -113,6 +117,7 @@ function SidebarButton({
         background: isActive ? "var(--accent-dim)" : "transparent",
         transition: "color 0.15s, background 0.15s",
         flexShrink: 0,
+        position: "relative",
       }}
       onMouseEnter={(e) => {
         if (!isActive) {
@@ -128,6 +133,20 @@ function SidebarButton({
       }}
     >
       {item.icon}
+      {showDot && (
+        <span
+          style={{
+            position: "absolute",
+            top: 6,
+            right: 6,
+            width: 7,
+            height: 7,
+            borderRadius: "50%",
+            background: "var(--accent)",
+            border: "1.5px solid var(--surface)",
+          }}
+        />
+      )}
     </button>
   );
 }

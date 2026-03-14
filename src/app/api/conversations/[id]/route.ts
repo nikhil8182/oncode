@@ -5,6 +5,7 @@ import {
   deleteConversation,
 } from "@/lib/conversations";
 import type { Conversation } from "@/types";
+import { validateAuth, unauthorizedResponse } from "@/lib/api-auth";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -17,6 +18,10 @@ export async function GET(
   _request: NextRequest,
   context: RouteContext
 ) {
+  if (!validateAuth(_request)) {
+    return unauthorizedResponse();
+  }
+
   const { id } = await context.params;
   try {
     const conv = await loadConversation(id);
@@ -42,6 +47,10 @@ export async function PUT(
   request: NextRequest,
   context: RouteContext
 ) {
+  if (!validateAuth(request)) {
+    return unauthorizedResponse();
+  }
+
   const { id } = await context.params;
   try {
     const existing = await loadConversation(id);
@@ -77,6 +86,10 @@ export async function DELETE(
   _request: NextRequest,
   context: RouteContext
 ) {
+  if (!validateAuth(_request)) {
+    return unauthorizedResponse();
+  }
+
   const { id } = await context.params;
   try {
     await deleteConversation(id);

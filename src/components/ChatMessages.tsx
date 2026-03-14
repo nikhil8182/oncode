@@ -257,13 +257,43 @@ export default function ChatMessages({ messages, isStreaming, isWaitingForRespon
               borderRadius: "var(--radius-lg)",
               padding: "12px 16px",
               display: "flex",
-              alignItems: "center",
+              flexDirection: "column",
               gap: 8,
             }}
           >
-            <span className="streaming-dot" />
-            <span className="streaming-dot" style={{ animationDelay: "0.2s" }} />
-            <span className="streaming-dot" style={{ animationDelay: "0.4s" }} />
+            {/* Skeleton loading lines */}
+            <div
+              className="skeleton-line"
+              style={{
+                height: 12,
+                width: "92%",
+                borderRadius: "var(--radius-sm)",
+                background: "var(--border-alt)",
+                animation: "skeleton-pulse 1.2s ease-in-out infinite",
+              }}
+            />
+            <div
+              className="skeleton-line"
+              style={{
+                height: 12,
+                width: "78%",
+                borderRadius: "var(--radius-sm)",
+                background: "var(--border-alt)",
+                animation: "skeleton-pulse 1.2s ease-in-out infinite",
+                animationDelay: "0.2s",
+              }}
+            />
+            <div
+              className="skeleton-line"
+              style={{
+                height: 12,
+                width: "60%",
+                borderRadius: "var(--radius-sm)",
+                background: "var(--border-alt)",
+                animation: "skeleton-pulse 1.2s ease-in-out infinite",
+                animationDelay: "0.4s",
+              }}
+            />
           </div>
         </div>
       )}
