@@ -118,7 +118,7 @@ export async function* runCLIProvider(
 
   const child = spawn(
     "claude",
-    ["-p", userMessage, "--output-format", "stream-json", "-y"],
+    ["-p", userMessage, "--output-format", "stream-json", "--dangerously-skip-permissions"],
     {
       cwd: projectPath,
       env: { ...process.env },
