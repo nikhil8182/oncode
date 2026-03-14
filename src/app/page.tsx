@@ -10,6 +10,7 @@ import ChatInput from "@/components/ChatInput";
 import ToolActivity from "@/components/ToolActivity";
 import TerminalPanel from "@/components/TerminalPanel";
 import ProjectPicker from "@/components/ProjectPicker";
+import Settings from "@/components/Settings";
 
 export type PanelId = "chat" | "files" | "terminal" | "history" | "settings";
 
@@ -131,61 +132,74 @@ export default function Home() {
       {/* Resize handle: explorer */}
       <div className="divider-v" onMouseDown={handleResizeExplorer} />
 
-      {/* Center chat area */}
-      <div
-        className="panel"
-        style={{
-          flex: 1,
-          minWidth: 0,
-          background: "var(--bg)",
-        }}
-      >
+      {/* Center area: Settings or Chat */}
+      {activePanel === "settings" ? (
         <div
-          className="panel-header"
-          style={{ justifyContent: "space-between" }}
-        >
-          <span>Chat</span>
-          <span
-            style={{
-              fontSize: 10,
-              color: connected ? "var(--accent)" : "var(--text-dim)",
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-            }}
-          >
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                background: connected ? "var(--accent)" : "var(--text-dim)",
-                display: "inline-block",
-              }}
-            />
-            {connected ? "Connected" : "Disconnected"}
-          </span>
-        </div>
-
-        <div className="panel-content">
-          <ChatMessages messages={messages} isStreaming={isStreaming} />
-        </div>
-
-        <div
+          className="panel"
           style={{
-            flexShrink: 0,
-            borderTop: "1px solid var(--border)",
-            padding: 12,
-            background: "var(--surface)",
+            flex: 1,
+            minWidth: 0,
+            background: "var(--bg)",
           }}
         >
-          <ChatInput
-            onSend={handleSendMessage}
-            disabled={isStreaming || !connected}
-            isStreaming={isStreaming}
-          />
+          <Settings />
         </div>
-      </div>
+      ) : (
+        <div
+          className="panel"
+          style={{
+            flex: 1,
+            minWidth: 0,
+            background: "var(--bg)",
+          }}
+        >
+          <div
+            className="panel-header"
+            style={{ justifyContent: "space-between" }}
+          >
+            <span>Chat</span>
+            <span
+              style={{
+                fontSize: 10,
+                color: connected ? "var(--accent)" : "var(--text-dim)",
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: connected ? "var(--accent)" : "var(--text-dim)",
+                  display: "inline-block",
+                }}
+              />
+              {connected ? "Connected" : "Disconnected"}
+            </span>
+          </div>
+
+          <div className="panel-content">
+            <ChatMessages messages={messages} isStreaming={isStreaming} />
+          </div>
+
+          <div
+            style={{
+              flexShrink: 0,
+              borderTop: "1px solid var(--border)",
+              padding: 12,
+              background: "var(--surface)",
+            }}
+          >
+            <ChatInput
+              onSend={handleSendMessage}
+              disabled={isStreaming || !connected}
+              isStreaming={isStreaming}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Resize handle: right panel */}
       <div className="divider-v" onMouseDown={handleResizeRightPanel} />

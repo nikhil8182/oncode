@@ -44,6 +44,15 @@ export interface TerminalOutput {
   timestamp: number;
 }
 
+export type ProviderType = "api-key" | "max-api" | "session-key" | "claude-cli";
+
+export interface ProviderStatus {
+  provider: ProviderType;
+  providerLabel: string;
+  hasApiKey: boolean;
+  hasSessionKey: boolean;
+}
+
 export interface SocketEvents {
   "chat:message": (data: { content: string; projectPath: string; conversationId?: string }) => void;
   "chat:stream": (data: { delta: string; messageId: string }) => void;
@@ -52,4 +61,6 @@ export interface SocketEvents {
   "tool:start": (data: ToolCall) => void;
   "tool:end": (data: ToolCall) => void;
   "terminal:output": (data: TerminalOutput) => void;
+  "config:update": (data?: { provider?: string; apiKey?: string; sessionKey?: string }) => void;
+  "config:current": (data: ProviderStatus) => void;
 }

@@ -138,6 +138,12 @@ export default function FileExplorer({ projectPath, onFileSelect }: FileExplorer
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    if (!projectPath) {
+      setTree([]);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
     setTree([]);

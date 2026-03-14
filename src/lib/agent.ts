@@ -3,10 +3,10 @@ import { exec } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { promisify } from "util";
+import { createAnthropicClient, runCLIProvider } from "./providers";
+import type { ProviderConfig } from "./providers";
 
 const execAsync = promisify(exec);
-
-const client = new Anthropic();
 
 // --- Path validation to prevent path traversal ---
 
@@ -467,14 +467,24 @@ export type AgentEvent =
     }
   | { type: "done"; data: { messageId: string } };
 
-// --- Main agent runner ---
+// --- Options for the agent runner ---
 
-export async function* runAgent(
+export interface RunAgentOptions {
+  provider?: ProviderConfig;
+  signal?: AbortSignal;
+}
+
+// --- Main agent runner (API-based providers: api-key, max-api, session-key) ---
+
+async function* runAPIAgent(
   userMessage: string,
   conversationHistory: Anthropic.MessageParam[],
-  projectPath: string
+  projectPath: string,
+  providerConfig: ProviderConfig
 ): AsyncGenerator<AgentEvent> {
   const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+  const client = createAnthropicClient(providerConfig);
 
   const systemPrompt = `You are Oncode, an AI coding assistant. You have access to the user's filesystem and can read, write, edit files, run commands, and search code. Work in the project directory: ${projectPath}`;
 
@@ -614,4 +624,31 @@ export async function* runAgent(
   }
 
   yield { type: "done", data: { messageId } };
+}
+
+// --- Main agent runner (dispatches to the correct provider) ---
+
+export async function* runAgent(
+  userMessage: string,
+  conversationHistory: Anthropic.MessageParam[],
+  projectPath: string,
+  options?: RunAgentOptions
+): AsyncGenerator<AgentEvent> {
+  const providerConfig: ProviderConfig = options?.provider || {
+    type: "api-key",
+  };
+
+  // Claude CLI provider — delegates everything to the claude CLI process
+  if (providerConfig.type === "claude-cli") {
+    yield* runCLIProvider(userMessage, projectPath, options?.signal);
+    return;
+  }
+
+  // API-based providers: api-key, max-api, session-key
+  yield* runAPIAgent(
+    userMessage,
+    conversationHistory,
+    projectPath,
+    providerConfig
+  );
 }
