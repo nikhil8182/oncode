@@ -25,21 +25,32 @@ function getConfigPath(): string {
 /**
  * Load the provider configuration from disk.
  * Returns the default config (claude-cli) if no config file exists.
+ *
+ * Falls back to the ANTHROPIC_API_KEY environment variable (e.g. from .env.local)
+ * if no API key is configured in the config file.
  */
 export function loadConfig(): OncodeConfig {
   const configPath = getConfigPath();
+  let config: OncodeConfig;
   try {
     const raw = fs.readFileSync(configPath, "utf-8");
     const parsed = JSON.parse(raw);
-    return {
+    config = {
       provider: parsed.provider || DEFAULT_CONFIG.provider,
       apiKey: parsed.apiKey,
       sessionKey: parsed.sessionKey,
     };
   } catch {
     // File doesn't exist or is invalid — return defaults
-    return { ...DEFAULT_CONFIG };
+    config = { ...DEFAULT_CONFIG };
   }
+
+  // Fall back to ANTHROPIC_API_KEY env var if no API key is set in the config file
+  if (!config.apiKey && process.env.ANTHROPIC_API_KEY) {
+    config.apiKey = process.env.ANTHROPIC_API_KEY;
+  }
+
+  return config;
 }
 
 /**

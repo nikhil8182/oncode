@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "ts-node --project tsconfig.server.json server.ts",
     "build": "next build",
-    "start": "NODE_ENV=production ts-node --project tsconfig.server.json server.ts"
+    "start": "NODE_ENV=production ts-node --project tsconfig.server.json server.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -19,11 +20,14 @@
     "lucide-react": "^0.468.0"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "jsdom": "^25.0.0",
     "typescript": "^5.7.0",
-    "ts-node": "^10.9.0"
+    "ts-node": "^10.9.0",
+    "vitest": "^3.0.0"
   }
 }

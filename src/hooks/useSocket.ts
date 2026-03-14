@@ -2,27 +2,37 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
-import type { Message, ToolCall, TerminalOutput } from "@/types";
+import type { Message, ToolCall, TerminalOutput, Conversation } from "@/types";
 
 interface UseSocketReturn {
   connected: boolean;
+  reconnecting: boolean;
   sendMessage: (content: string, projectPath: string) => void;
   messages: Message[];
   toolCalls: ToolCall[];
   terminalOutputs: TerminalOutput[];
   isStreaming: boolean;
+  clearMessages: () => void;
+  activeConversationId: string | null;
+  loadConversation: (id: string) => Promise<void>;
+  newConversation: () => void;
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
 }
 
 export function useSocket(): UseSocketReturn {
   const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
   const [terminalOutputs, setTerminalOutputs] = useState<TerminalOutput[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
 
   // Track the current streaming message id so we can accumulate deltas
   const streamingMessageIdRef = useRef<string | null>(null);
+  // Ref to hold the latest conversationId for the socket listener
+  const activeConversationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const socket = io({
@@ -34,10 +44,26 @@ export function useSocket(): UseSocketReturn {
 
     socket.on("connect", () => {
       setConnected(true);
+      setReconnecting(false);
+      // Clear stuck streaming state on reconnect
+      setIsStreaming(false);
+      streamingMessageIdRef.current = null;
     });
 
     socket.on("disconnect", () => {
       setConnected(false);
+    });
+
+    socket.io.on("reconnect_attempt", () => {
+      setReconnecting(true);
+    });
+
+    socket.io.on("reconnect", () => {
+      setReconnecting(false);
+    });
+
+    socket.io.on("reconnect_failed", () => {
+      setReconnecting(false);
     });
 
     // Streaming deltas from the assistant
@@ -111,10 +137,27 @@ export function useSocket(): UseSocketReturn {
       setTerminalOutputs((prev) => [...prev, data]);
     });
 
+    // Conversation saved — update the active ID
+    socket.on(
+      "conversation:saved",
+      (data: { conversationId: string }) => {
+        activeConversationIdRef.current = data.conversationId;
+        setActiveConversationId(data.conversationId);
+      }
+    );
+
     return () => {
       socket.disconnect();
       socketRef.current = null;
     };
+  }, []);
+
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+    setToolCalls([]);
+    setTerminalOutputs([]);
+    setIsStreaming(false);
+    streamingMessageIdRef.current = null;
   }, []);
 
   const sendMessage = useCallback(
@@ -133,17 +176,53 @@ export function useSocket(): UseSocketReturn {
       socketRef.current.emit("chat:message", {
         content: content.trim(),
         projectPath,
+        conversationId: activeConversationIdRef.current ?? undefined,
       });
     },
     []
   );
 
+  /** Load a conversation by ID from the REST API and set its messages. */
+  const loadConversationById = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/conversations/${id}`);
+      if (!res.ok) return;
+      const conv: Conversation = await res.json();
+      setMessages(conv.messages);
+      setToolCalls([]);
+      setTerminalOutputs([]);
+      setIsStreaming(false);
+      streamingMessageIdRef.current = null;
+      activeConversationIdRef.current = conv.id;
+      setActiveConversationId(conv.id);
+    } catch {
+      // Silently fail — the UI will stay as-is
+    }
+  }, []);
+
+  /** Start a brand-new conversation: clear messages and reset the ID. */
+  const newConversation = useCallback(() => {
+    setMessages([]);
+    setToolCalls([]);
+    setTerminalOutputs([]);
+    setIsStreaming(false);
+    streamingMessageIdRef.current = null;
+    activeConversationIdRef.current = null;
+    setActiveConversationId(null);
+  }, []);
+
   return {
     connected,
+    reconnecting,
     sendMessage,
     messages,
     toolCalls,
     terminalOutputs,
     isStreaming,
+    clearMessages,
+    activeConversationId,
+    loadConversation: loadConversationById,
+    newConversation,
+    setMessages,
   };
 }

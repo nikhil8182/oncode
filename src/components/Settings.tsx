@@ -93,6 +93,11 @@ export default function Settings() {
     apiKey?: string;
     sessionKey?: string;
   }>({});
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   // Load current config on mount
   useEffect(() => {
@@ -172,6 +177,42 @@ export default function Settings() {
       setStatusMsg({ type: "error", text: "Network error. Could not save settings." });
     } finally {
       setSaving(false);
+    }
+  }, [selectedProvider, apiKey, sessionKey]);
+
+  const handleTest = useCallback(async () => {
+    setTesting(true);
+    setTestResult(null);
+
+    try {
+      const body: Record<string, string> = { provider: selectedProvider };
+      if (apiKey) body.apiKey = apiKey;
+      if (sessionKey) body.sessionKey = sessionKey;
+
+      const res = await fetch("/api/config/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setTestResult({
+          type: "success",
+          text: data.model
+            ? `Connected (${data.model})`
+            : data.message || "Connection successful",
+        });
+      } else {
+        setTestResult({
+          type: "error",
+          text: data.message || "Connection failed",
+        });
+      }
+    } catch {
+      setTestResult({ type: "error", text: "Network error. Could not test connection." });
+    } finally {
+      setTesting(false);
     }
   }, [selectedProvider, apiKey, sessionKey]);
 
@@ -519,32 +560,77 @@ export default function Settings() {
           })}
         </div>
 
-        {/* Save button */}
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          style={{
-            width: "100%",
-            marginTop: 20,
-            padding: "10px 0",
-            fontSize: 13,
-            fontWeight: 600,
-            borderRadius: "var(--radius-md)",
-            background: saving ? "var(--accent-hover)" : "var(--accent)",
-            color: "#fff",
-            cursor: saving ? "not-allowed" : "pointer",
-            transition: "background 0.15s",
-            opacity: saving ? 0.7 : 1,
-          }}
-          onMouseEnter={(e) => {
-            if (!saving) e.currentTarget.style.background = "var(--accent-hover)";
-          }}
-          onMouseLeave={(e) => {
-            if (!saving) e.currentTarget.style.background = "var(--accent)";
-          }}
-        >
-          {saving ? "Saving..." : "Save Settings"}
-        </button>
+        {/* Save & Test buttons */}
+        <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            style={{
+              flex: 1,
+              padding: "10px 0",
+              fontSize: 13,
+              fontWeight: 600,
+              borderRadius: "var(--radius-md)",
+              background: saving ? "var(--accent-hover)" : "var(--accent)",
+              color: "#fff",
+              cursor: saving ? "not-allowed" : "pointer",
+              transition: "background 0.15s",
+              opacity: saving ? 0.7 : 1,
+            }}
+            onMouseEnter={(e) => {
+              if (!saving) e.currentTarget.style.background = "var(--accent-hover)";
+            }}
+            onMouseLeave={(e) => {
+              if (!saving) e.currentTarget.style.background = "var(--accent)";
+            }}
+          >
+            {saving ? "Saving..." : "Save Settings"}
+          </button>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleTest();
+            }}
+            disabled={testing}
+            style={{
+              padding: "10px 20px",
+              fontSize: 13,
+              fontWeight: 600,
+              borderRadius: "var(--radius-md)",
+              background: testing ? "var(--surface-alt)" : "var(--surface)",
+              color: "var(--text-muted)",
+              border: "1px solid var(--border-alt)",
+              cursor: testing ? "not-allowed" : "pointer",
+              transition: "background 0.15s, border-color 0.15s",
+              opacity: testing ? 0.7 : 1,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+            onMouseEnter={(e) => {
+              if (!testing) {
+                e.currentTarget.style.background = "var(--surface-alt)";
+                e.currentTarget.style.borderColor = "var(--text-dim)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!testing) {
+                e.currentTarget.style.background = "var(--surface)";
+                e.currentTarget.style.borderColor = "var(--border-alt)";
+              }
+            }}
+          >
+            {testing ? (
+              <>
+                <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+                Testing...
+              </>
+            ) : (
+              "Test Connection"
+            )}
+          </button>
+        </div>
 
         {/* Status message */}
         {statusMsg && (
@@ -571,6 +657,34 @@ export default function Settings() {
               <AlertTriangle size={14} />
             )}
             {statusMsg.text}
+          </div>
+        )}
+
+        {/* Test result message */}
+        {testResult && (
+          <div
+            style={{
+              marginTop: statusMsg ? 8 : 12,
+              padding: "8px 12px",
+              borderRadius: "var(--radius-md)",
+              fontSize: 12,
+              background:
+                testResult.type === "success"
+                  ? "var(--accent-dim)"
+                  : "rgba(239, 68, 68, 0.12)",
+              color:
+                testResult.type === "success" ? "var(--accent)" : "var(--danger)",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            {testResult.type === "success" ? (
+              <Check size={14} />
+            ) : (
+              <AlertTriangle size={14} />
+            )}
+            {testResult.text}
           </div>
         )}
 

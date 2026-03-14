@@ -9,6 +9,8 @@ import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 interface ChatMessagesProps {
   messages: Message[];
   isStreaming: boolean;
+  /** True after a user message is sent but before any streaming response arrives */
+  isWaitingForResponse: boolean;
 }
 
 // Hoisted to module scope — no dependency on props, avoids re-creating on every render.
@@ -172,12 +174,12 @@ const MessageBubble = React.memo(function MessageBubble({ message }: { message: 
   );
 });
 
-export default function ChatMessages({ messages, isStreaming }: ChatMessagesProps) {
+export default function ChatMessages({ messages, isStreaming, isWaitingForResponse }: ChatMessagesProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "instant" });
-  }, [messages]);
+  }, [messages, isWaitingForResponse]);
 
   if (messages.length === 0) {
     return (
@@ -214,16 +216,55 @@ export default function ChatMessages({ messages, isStreaming }: ChatMessagesProp
     );
   }
 
+  // Show the thinking indicator when:
+  // 1. User sent a message and we're waiting for any response (before streaming starts), OR
+  // 2. Streaming has started but no assistant message text has arrived yet
+  const lastMessage = messages[messages.length - 1];
+  const showThinking =
+    isWaitingForResponse ||
+    (isStreaming && (!lastMessage || lastMessage.role === "user"));
+
   return (
     <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
       {messages.map((msg) => (
         <MessageBubble key={msg.id} message={msg} />
       ))}
 
-      {isStreaming && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
-          <span className="streaming-dot" />
-          <span style={{ fontSize: 11, color: "var(--text-dim)" }}>Oncode is thinking...</span>
+      {showThinking && (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: "var(--accent)",
+              fontFamily: "var(--font-mono)",
+            }}
+          >
+            Oncode
+          </span>
+          <div
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-lg)",
+              padding: "12px 16px",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span className="streaming-dot" />
+            <span className="streaming-dot" style={{ animationDelay: "0.2s" }} />
+            <span className="streaming-dot" style={{ animationDelay: "0.4s" }} />
+          </div>
         </div>
       )}
 

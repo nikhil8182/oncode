@@ -4,8 +4,13 @@ import { Server as SocketIOServer } from "socket.io";
 import { runAgent } from "./src/lib/agent";
 import { loadConfig } from "./src/lib/config";
 import { PROVIDER_INFO } from "./src/lib/providers";
+import {
+  createConversation,
+  saveConversation,
+  loadConversation,
+} from "./src/lib/conversations";
 import type { ProviderConfig } from "./src/lib/providers";
-import type { ToolCall, TerminalOutput } from "./src/types";
+import type { ToolCall, TerminalOutput, Message } from "./src/types";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
@@ -183,7 +188,7 @@ app.prepare().then(() => {
                 } as TerminalOutput);
                 break;
 
-              case "done":
+              case "done": {
                 // Update conversation history with the exchange
                 history.push({ role: "user", content });
                 if (fullAssistantText) {
@@ -197,10 +202,63 @@ app.prepare().then(() => {
                 if (history.length > MAX_HISTORY) {
                   history.splice(0, history.length - MAX_HISTORY);
                 }
+
+                // --- Persist conversation to disk ---
+                try {
+                  let convId = conversationId;
+                  let conv;
+
+                  if (convId) {
+                    conv = await loadConversation(convId);
+                  }
+
+                  if (!conv) {
+                    // Create a new conversation
+                    conv = createConversation(projectPath);
+                    convId = conv.id;
+                  }
+
+                  // Build Message objects for the new exchange
+                  const userMsg: Message = {
+                    id: `user-${Date.now()}`,
+                    role: "user",
+                    content,
+                    timestamp: Date.now(),
+                  };
+
+                  const msgs: Message[] = [...conv.messages, userMsg];
+
+                  if (fullAssistantText) {
+                    msgs.push({
+                      id: event.data.messageId,
+                      role: "assistant",
+                      content: fullAssistantText,
+                      timestamp: Date.now(),
+                    });
+                  }
+
+                  // Derive title from the first user message if none set
+                  if (!conv.title && msgs.length > 0) {
+                    const firstUser = msgs.find((m) => m.role === "user");
+                    if (firstUser) {
+                      conv.title = firstUser.content.split("\n")[0].slice(0, 80);
+                    }
+                  }
+
+                  conv.messages = msgs;
+                  conv.updatedAt = Date.now();
+                  await saveConversation(conv);
+
+                  socket.emit("conversation:saved", { conversationId: convId });
+                } catch (saveErr) {
+                  console.error("[Socket.io] Failed to save conversation:", saveErr);
+                }
+
                 socket.emit("chat:stream-end", {
                   messageId: event.data.messageId,
                 });
                 break;
+              }
             }
           }
         } catch (err: unknown) {
