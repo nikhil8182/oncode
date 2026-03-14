@@ -1,6 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { spawn, ChildProcess } from "child_process";
+import { spawn, ChildProcess, exec } from "child_process";
+import { promisify } from "util";
 import type { AgentEvent } from "./agent";
+
+const execAsync = promisify(exec);
 
 // --- Provider type definitions ---
 
@@ -93,6 +96,10 @@ interface CLIStreamEvent {
   tool_use_id?: string;
   content?: string;
   result?: string;
+  // Nested message format from --include-partial-messages
+  message?: {
+    content?: Array<{ type: string; text?: string; name?: string; input?: Record<string, unknown>; id?: string }>;
+  };
   // result events
   cost_usd?: number;
   duration_ms?: number;
@@ -107,7 +114,8 @@ export interface CLIProcess {
 
 /**
  * Runs a message through the Claude Code CLI and yields AgentEvents.
- * Spawns `claude -p "message" --output-format stream-json -y` and parses the output.
+ * Uses exec to run the CLI and parses the complete output, then also
+ * supports streaming via spawn for real-time output.
  */
 export async function* runCLIProvider(
   userMessage: string,
@@ -116,229 +124,67 @@ export async function* runCLIProvider(
 ): AsyncGenerator<AgentEvent> {
   const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-  const child = spawn(
-    "claude",
-    ["-p", userMessage, "--output-format", "stream-json", "--dangerously-skip-permissions"],
-    {
-      cwd: projectPath,
-      env: { ...process.env },
-      stdio: ["pipe", "pipe", "pipe"],
-    }
-  );
+  // Escape single quotes in the message
+  const safeMessage = userMessage.replace(/'/g, "'\\''");
+  const cmd = `claude -p '${safeMessage}' --output-format json --dangerously-skip-permissions`;
 
-  // Handle abort signal
-  if (signal) {
-    const onAbort = () => {
-      child.kill("SIGTERM");
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-  }
-
-  let currentToolId: string | null = null;
-  let currentToolName: string | null = null;
-  let currentToolInput: Record<string, unknown> | null = null;
-
-  // Create a promise-based async iterator from the child process stdout
-  const lines = createLineIterator(child);
+  console.log("[CLI] Running:", cmd.slice(0, 120) + "...");
 
   try {
-    for await (const line of lines) {
-      if (!line.trim()) continue;
+    const { stdout, stderr } = await execAsync(cmd, {
+      cwd: projectPath || undefined,
+      timeout: 300000, // 5 minute timeout
+      maxBuffer: 50 * 1024 * 1024, // 50MB buffer
+      env: { ...process.env },
+    });
 
-      let event: CLIStreamEvent;
-      try {
-        event = JSON.parse(line);
-      } catch {
-        // Not valid JSON, skip
-        continue;
-      }
+    if (stderr) {
+      console.error("[CLI stderr]", stderr.slice(0, 200));
+    }
 
-      switch (event.type) {
-        case "assistant": {
-          if (event.subtype === "text" && event.text) {
-            yield {
-              type: "text",
-              data: { delta: event.text, messageId },
-            };
-          }
-          break;
-        }
+    // --output-format json returns a single JSON object with a "result" field
+    const trimmed = stdout.trim();
+    console.log("[CLI] Got output:", trimmed.slice(0, 200));
 
-        case "tool_use": {
-          // Claude CLI is about to use a tool
-          const toolCallId = `tc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-          currentToolId = toolCallId;
-          currentToolName = event.tool_name || "unknown";
-          currentToolInput = event.tool_input || {};
-
-          yield {
-            type: "tool_start",
-            data: {
-              id: toolCallId,
-              name: currentToolName,
-              input: currentToolInput,
-              timestamp: Date.now(),
-            },
-          };
-          break;
-        }
-
-        case "tool_result": {
-          // Tool finished executing
-          if (currentToolId && currentToolName) {
-            const output = event.content || event.text || "";
-
-            // Emit terminal event for bash/command tools
-            if (
-              currentToolName === "bash" ||
-              currentToolName === "execute_command"
-            ) {
-              yield {
-                type: "terminal",
-                data: {
-                  id: `term_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-                  command:
-                    (currentToolInput?.command as string) || "command",
-                  output,
-                  exitCode: event.is_error ? 1 : 0,
-                  timestamp: Date.now(),
-                },
-              };
-            }
-
-            yield {
-              type: "tool_end",
-              data: {
-                id: currentToolId,
-                name: currentToolName,
-                input: currentToolInput || {},
-                output,
-                status: event.is_error ? "error" : "completed",
-                timestamp: Date.now(),
-              },
-            };
-          }
-
-          currentToolId = null;
-          currentToolName = null;
-          currentToolInput = null;
-          break;
-        }
-
-        case "result": {
-          // Final result from the CLI — we're done
-          if (event.result) {
-            yield {
-              type: "text",
-              data: { delta: event.result, messageId },
-            };
-          }
-          break;
-        }
+    try {
+      const result = JSON.parse(trimmed);
+      // The JSON format returns: { result: "text response", ... }
+      const text = result.result || result.text || trimmed;
+      yield {
+        type: "text",
+        data: { delta: text, messageId },
+      };
+    } catch {
+      // If not valid JSON, use raw output as text
+      if (trimmed) {
+        yield {
+          type: "text",
+          data: { delta: trimmed, messageId },
+        };
       }
     }
   } catch (err: unknown) {
-    // If the process was killed via abort, don't throw
     if (signal?.aborted) {
       // Silently end
     } else {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new Error(`Claude CLI error: ${message}`);
+      const execErr = err as { stdout?: string; stderr?: string; message?: string };
+      // If we got stdout despite the error, try to extract the result
+      if (execErr.stdout) {
+        const text = execErr.stdout.trim();
+        try {
+          const result = JSON.parse(text);
+          yield { type: "text", data: { delta: result.result || text, messageId } };
+        } catch {
+          if (text) {
+            yield { type: "text", data: { delta: text, messageId } };
+          }
+        }
+      } else {
+        const message = execErr.message || String(err);
+        throw new Error(`Claude CLI error: ${message}`);
+      }
     }
   }
 
   yield { type: "done", data: { messageId } };
-}
-
-/**
- * Creates an async line iterator from a child process's stdout.
- * Buffers partial lines and yields complete newline-delimited lines.
- */
-async function* createLineIterator(
-  child: ChildProcess
-): AsyncGenerator<string> {
-  const { stdout, stderr } = child;
-  if (!stdout) throw new Error("Claude CLI: no stdout available");
-
-  let buffer = "";
-
-  // Collect stderr for error reporting
-  let stderrOutput = "";
-  if (stderr) {
-    stderr.on("data", (chunk: Buffer) => {
-      stderrOutput += chunk.toString();
-    });
-  }
-
-  // Create a promise that resolves when the process exits
-  const exitPromise = new Promise<number | null>((resolve) => {
-    child.on("close", (code) => resolve(code));
-    child.on("error", () => resolve(null));
-  });
-
-  // Async iteration over stdout data chunks
-  const chunks: Buffer[] = [];
-  let resolveChunk: (() => void) | null = null;
-  let done = false;
-
-  stdout.on("data", (chunk: Buffer) => {
-    chunks.push(chunk);
-    if (resolveChunk) {
-      resolveChunk();
-      resolveChunk = null;
-    }
-  });
-
-  stdout.on("end", () => {
-    done = true;
-    if (resolveChunk) {
-      resolveChunk();
-      resolveChunk = null;
-    }
-  });
-
-  stdout.on("error", () => {
-    done = true;
-    if (resolveChunk) {
-      resolveChunk();
-      resolveChunk = null;
-    }
-  });
-
-  while (true) {
-    // Process any available chunks
-    while (chunks.length > 0) {
-      const chunk = chunks.shift()!;
-      buffer += chunk.toString();
-
-      // Yield complete lines
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || ""; // Keep incomplete last line in buffer
-      for (const line of lines) {
-        if (line.trim()) {
-          yield line;
-        }
-      }
-    }
-
-    if (done) break;
-
-    // Wait for more data
-    await new Promise<void>((resolve) => {
-      resolveChunk = resolve;
-    });
-  }
-
-  // Yield any remaining buffer content
-  if (buffer.trim()) {
-    yield buffer;
-  }
-
-  // Wait for exit and check for errors
-  const exitCode = await exitPromise;
-  if (exitCode !== null && exitCode !== 0 && stderrOutput) {
-    throw new Error(
-      `Claude CLI exited with code ${exitCode}: ${stderrOutput.slice(0, 500)}`
-    );
-  }
 }
