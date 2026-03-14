@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+import { formatRelativeTime } from "@/lib/utils";
 import type { ToolCall } from "@/types";
 
 interface ToolActivityProps {
@@ -51,25 +53,6 @@ function formatToolName(call: ToolCall): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function relativeTime(timestamp: number): string {
-  const now = Date.now();
-  const diff = now - timestamp;
-
-  if (diff < 2000) return "now";
-
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
 function statusColor(status: ToolCall["status"]): string {
   switch (status) {
     case "completed":
@@ -77,41 +60,23 @@ function statusColor(status: ToolCall["status"]): string {
     case "running":
       return "#eab308";
     case "error":
-      return "#ef4444";
+      return "var(--danger)";
     case "pending":
     default:
-      return "#555";
+      return "var(--text-dim)";
   }
 }
 
 export default function ToolActivity({ toolCalls }: ToolActivityProps) {
   // Newest first
-  const sorted = [...toolCalls].sort((a, b) => b.timestamp - a.timestamp);
+  const sorted = useMemo(
+    () => [...toolCalls].sort((a, b) => b.timestamp - a.timestamp),
+    [toolCalls]
+  );
 
   return (
-    <div
-      style={{
-        background: "#0f0f0f",
-        borderRadius: 8,
-        border: "1px solid #1a1a1a",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-      }}
-    >
-      <div
-        style={{
-          padding: "10px 12px 6px",
-          fontSize: 10,
-          fontWeight: 600,
-          letterSpacing: "0.08em",
-          color: "#555",
-          textTransform: "uppercase",
-        }}
-      >
-        Tool Activity
-      </div>
+    <div className="panel-card">
+      <div className="panel-card-header">Tool Activity</div>
       <div
         style={{
           flex: 1,
@@ -120,16 +85,7 @@ export default function ToolActivity({ toolCalls }: ToolActivityProps) {
         }}
       >
         {sorted.length === 0 ? (
-          <div
-            style={{
-              padding: "20px 12px",
-              fontSize: 13,
-              color: "#555",
-              textAlign: "center",
-            }}
-          >
-            No activity yet
-          </div>
+          <div className="panel-empty">No activity yet</div>
         ) : (
           sorted.map((call) => (
             <div
@@ -151,7 +107,7 @@ export default function ToolActivity({ toolCalls }: ToolActivityProps) {
                   flexShrink: 0,
                   animation:
                     call.status === "running"
-                      ? "ta-pulse 1.5s ease-in-out infinite"
+                      ? "skeleton-pulse 1.5s ease-in-out infinite"
                       : "none",
                 }}
               />
@@ -159,13 +115,13 @@ export default function ToolActivity({ toolCalls }: ToolActivityProps) {
                 style={{
                   flex: 1,
                   fontSize: 13,
-                  color: "#ccc",
+                  color: "var(--text)",
                   whiteSpace: "nowrap",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   fontFamily:
                     call.name === "bash" || call.name === "Bash"
-                      ? "'SF Mono', 'Fira Code', 'Cascadia Code', monospace"
+                      ? "var(--font-mono)"
                       : "inherit",
                 }}
               >
@@ -174,23 +130,17 @@ export default function ToolActivity({ toolCalls }: ToolActivityProps) {
               <span
                 style={{
                   fontSize: 11,
-                  color: "#555",
+                  color: "var(--text-dim)",
                   whiteSpace: "nowrap",
                   flexShrink: 0,
                 }}
               >
-                {relativeTime(call.timestamp)}
+                {formatRelativeTime(call.timestamp)}
               </span>
             </div>
           ))
         )}
       </div>
-      <style>{`
-        @keyframes ta-pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.3; }
-        }
-      `}</style>
     </div>
   );
 }

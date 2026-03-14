@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import type { FileNode } from "@/types";
 
 // Directories to skip when building the file tree
@@ -20,12 +21,12 @@ const SKIP_DIRS = new Set([
 
 const MAX_DEPTH = 3;
 
-function buildFileTree(dirPath: string, depth: number): FileNode[] {
+async function buildFileTree(dirPath: string, depth: number): Promise<FileNode[]> {
   if (depth > MAX_DEPTH) return [];
 
   let entries: fs.Dirent[];
   try {
-    entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -48,7 +49,7 @@ function buildFileTree(dirPath: string, depth: number): FileNode[] {
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue;
 
-      const children = buildFileTree(fullPath, depth + 1);
+      const children = await buildFileTree(fullPath, depth + 1);
       nodes.push({
         name: entry.name,
         path: fullPath,
@@ -78,9 +79,19 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Validate the path is within the user's home directory
+  const resolvedPath = path.resolve(dirPath);
+  const homeDir = os.homedir();
+  if (!resolvedPath.startsWith(homeDir + path.sep) && resolvedPath !== homeDir) {
+    return NextResponse.json(
+      { error: "Access denied: path must be within the user's home directory" },
+      { status: 403 }
+    );
+  }
+
   // Validate the path exists and is a directory
   try {
-    const stats = fs.statSync(dirPath);
+    const stats = await fs.promises.stat(resolvedPath);
     if (!stats.isDirectory()) {
       return NextResponse.json(
         { error: "The specified path is not a directory" },
@@ -95,7 +106,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tree = buildFileTree(dirPath, 0);
+    const tree = await buildFileTree(resolvedPath, 0);
     return NextResponse.json(tree);
   } catch (err: unknown) {
     const message =

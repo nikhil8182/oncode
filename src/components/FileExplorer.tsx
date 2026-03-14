@@ -25,15 +25,15 @@ function SkeletonRow({ depth }: { depth: number }) {
           width: 14,
           height: 14,
           borderRadius: 3,
-          background: "#1a1a1a",
+          background: "var(--border)",
         }}
       />
       <div
         style={{
-          width: 60 + Math.random() * 80,
+          width: 60 + ((depth * 37 + 41) % 80),
           height: 12,
           borderRadius: 3,
-          background: "#1a1a1a",
+          background: "var(--border)",
           animation: "skeleton-pulse 1.5s ease-in-out infinite",
         }}
       />
@@ -69,6 +69,7 @@ function TreeNode({
       <div
         role="treeitem"
         tabIndex={0}
+        className="list-item"
         onClick={() => (isDir ? onToggleDir(node.path) : onFileSelect(node.path))}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -83,35 +84,22 @@ function TreeNode({
           paddingLeft: depth * 16 + 8,
           paddingRight: 8,
           gap: 6,
-          cursor: "pointer",
-          background: isSelected ? "#1a1a1a" : "transparent",
-          userSelect: "none",
-          transition: "background 0.1s",
-        }}
-        onMouseEnter={(e) => {
-          if (!isSelected) {
-            (e.currentTarget as HTMLDivElement).style.background = "#111";
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isSelected) {
-            (e.currentTarget as HTMLDivElement).style.background = "transparent";
-          }
+          background: isSelected ? "var(--border)" : undefined,
         }}
       >
         {isDir ? (
           isExpanded ? (
-            <FolderOpen size={14} color="#0d9488" style={{ flexShrink: 0 }} />
+            <FolderOpen size={14} color="var(--accent)" style={{ flexShrink: 0 }} />
           ) : (
-            <Folder size={14} color="#555" style={{ flexShrink: 0 }} />
+            <Folder size={14} color="var(--text-dim)" style={{ flexShrink: 0 }} />
           )
         ) : (
-          <File size={14} color="#555" style={{ flexShrink: 0 }} />
+          <File size={14} color="var(--text-dim)" style={{ flexShrink: 0 }} />
         )}
         <span
           style={{
             fontSize: 13,
-            color: isDir && isExpanded ? "#0d9488" : "#ccc",
+            color: isDir && isExpanded ? "var(--accent)" : "var(--text)",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -120,7 +108,7 @@ function TreeNode({
         >
           {baseName}
           {ext && (
-            <span style={{ color: "#555" }}>{ext}</span>
+            <span style={{ color: "var(--text-dim)" }}>{ext}</span>
           )}
         </span>
       </div>
@@ -194,29 +182,8 @@ export default function FileExplorer({ projectPath, onFileSelect }: FileExplorer
   );
 
   return (
-    <div
-      style={{
-        background: "#0f0f0f",
-        borderRadius: 8,
-        border: "1px solid #1a1a1a",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-      }}
-    >
-      <div
-        style={{
-          padding: "10px 12px 6px",
-          fontSize: 10,
-          fontWeight: 600,
-          letterSpacing: "0.08em",
-          color: "#555",
-          textTransform: "uppercase",
-        }}
-      >
-        Files
-      </div>
+    <div className="panel-card">
+      <div className="panel-card-header">Files</div>
       <div
         role="tree"
         style={{
@@ -238,16 +205,7 @@ export default function FileExplorer({ projectPath, onFileSelect }: FileExplorer
             <SkeletonRow depth={1} />
           </>
         ) : tree.length === 0 ? (
-          <div
-            style={{
-              padding: "20px 12px",
-              fontSize: 13,
-              color: "#555",
-              textAlign: "center",
-            }}
-          >
-            No files found
-          </div>
+          <div className="panel-empty">No files found</div>
         ) : (
           tree.map((node) => (
             <TreeNode
@@ -262,12 +220,6 @@ export default function FileExplorer({ projectPath, onFileSelect }: FileExplorer
           ))
         )}
       </div>
-      <style>{`
-        @keyframes skeleton-pulse {
-          0%, 100% { opacity: 0.4; }
-          50% { opacity: 1; }
-        }
-      `}</style>
     </div>
   );
 }

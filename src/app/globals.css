@@ -225,14 +225,9 @@ pre {
 
 /* ── Streaming indicator ── */
 
-@keyframes pulse-teal {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.3;
-  }
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
 }
 
 .streaming-dot {
@@ -241,5 +236,49 @@ pre {
   height: 7px;
   border-radius: 50%;
   background: var(--accent);
-  animation: pulse-teal 1.2s ease-in-out infinite;
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+/* ── Panel card ── */
+
+.panel-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.panel-card-header {
+  padding: 10px 12px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.panel-empty {
+  padding: 20px 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* ── List items ── */
+
+.list-item {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s;
+}
+
+.list-item:hover {
+  background: var(--surface-alt);
+}
+
+.list-item.active {
+  background: var(--border);
 }

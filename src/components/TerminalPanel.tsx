@@ -7,9 +7,6 @@ interface TerminalPanelProps {
   outputs: TerminalOutput[];
 }
 
-const monoFont =
-  "'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace";
-
 export default function TerminalPanel({ outputs }: TerminalPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -21,27 +18,12 @@ export default function TerminalPanel({ outputs }: TerminalPanelProps) {
 
   return (
     <div
-      style={{
-        background: "#0f0f0f",
-        borderRadius: 8,
-        border: "1px solid #1a1a1a",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        fontFamily: monoFont,
-      }}
+      className="panel-card"
+      style={{ fontFamily: "var(--font-mono)" }}
     >
       <div
-        style={{
-          padding: "10px 12px 6px",
-          fontSize: 10,
-          fontWeight: 600,
-          letterSpacing: "0.08em",
-          color: "#555",
-          textTransform: "uppercase",
-          fontFamily: "inherit",
-        }}
+        className="panel-card-header"
+        style={{ fontFamily: "inherit" }}
       >
         Terminal
       </div>
@@ -55,13 +37,8 @@ export default function TerminalPanel({ outputs }: TerminalPanelProps) {
       >
         {outputs.length === 0 ? (
           <div
-            style={{
-              padding: "20px 12px",
-              fontSize: 13,
-              color: "#555",
-              textAlign: "center",
-              fontFamily: monoFont,
-            }}
+            className="panel-empty"
+            style={{ fontFamily: "var(--font-mono)" }}
           >
             No commands executed
           </div>
@@ -72,7 +49,7 @@ export default function TerminalPanel({ outputs }: TerminalPanelProps) {
                 <div
                   style={{
                     height: 1,
-                    background: "#1a1a1a",
+                    background: "var(--border)",
                     margin: "6px 12px",
                   }}
                 />
@@ -90,7 +67,7 @@ export default function TerminalPanel({ outputs }: TerminalPanelProps) {
                 >
                   <span
                     style={{
-                      color: "#0d9488",
+                      color: "var(--accent)",
                       fontWeight: 600,
                       flexShrink: 0,
                       userSelect: "none",
@@ -100,7 +77,7 @@ export default function TerminalPanel({ outputs }: TerminalPanelProps) {
                   </span>
                   <span
                     style={{
-                      color: "#ccc",
+                      color: "var(--text)",
                       wordBreak: "break-all",
                     }}
                   >
@@ -115,10 +92,10 @@ export default function TerminalPanel({ outputs }: TerminalPanelProps) {
                       padding: 0,
                       fontSize: 12,
                       lineHeight: "18px",
-                      color: "#888",
+                      color: "var(--text-muted)",
                       whiteSpace: "pre-wrap",
                       wordBreak: "break-all",
-                      fontFamily: monoFont,
+                      fontFamily: "var(--font-mono)",
                       background: "transparent",
                       border: "none",
                     }}
@@ -131,7 +108,7 @@ export default function TerminalPanel({ outputs }: TerminalPanelProps) {
                   <div
                     style={{
                       fontSize: 11,
-                      color: "#ef4444",
+                      color: "var(--danger)",
                       marginTop: 4,
                     }}
                   >

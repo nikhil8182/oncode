@@ -18,7 +18,7 @@ app.prepare().then(() => {
 
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: dev ? "*" : undefined,
+      origin: dev ? "http://localhost:3000" : undefined,
       methods: ["GET", "POST"],
     },
     // Increase max buffer for large file contents
@@ -113,6 +113,11 @@ app.prepare().then(() => {
                     role: "assistant",
                     content: fullAssistantText,
                   });
+                }
+                // Cap conversation history to last 50 messages
+                const MAX_HISTORY = 50;
+                if (history.length > MAX_HISTORY) {
+                  history.splice(0, history.length - MAX_HISTORY);
                 }
                 socket.emit("chat:stream-end", {
                   messageId: event.data.messageId,

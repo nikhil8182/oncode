@@ -5,7 +5,6 @@ import { io, Socket } from "socket.io-client";
 import type { Message, ToolCall, TerminalOutput } from "@/types";
 
 interface UseSocketReturn {
-  socket: Socket | null;
   connected: boolean;
   sendMessage: (content: string, projectPath: string) => void;
   messages: Message[];
@@ -42,6 +41,8 @@ export function useSocket(): UseSocketReturn {
     });
 
     // Streaming deltas from the assistant
+    // Performance note: consumers rendering streamed messages should use React.memo
+    // on message components to avoid re-rendering the full list on every delta.
     socket.on("chat:stream", (data: { delta: string; messageId: string }) => {
       const { delta, messageId } = data;
 
@@ -138,7 +139,6 @@ export function useSocket(): UseSocketReturn {
   );
 
   return {
-    socket: socketRef.current,
     connected,
     sendMessage,
     messages,

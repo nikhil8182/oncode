@@ -8,6 +8,18 @@ const execAsync = promisify(exec);
 
 const client = new Anthropic();
 
+// --- Path validation to prevent path traversal ---
+
+function validatePath(filePath: string, projectPath: string): void {
+  const resolved = path.resolve(filePath);
+  const resolvedProject = path.resolve(projectPath);
+  if (!resolved.startsWith(resolvedProject + path.sep) && resolved !== resolvedProject) {
+    throw new Error(
+      `Path '${filePath}' is outside the project directory. Access denied.`
+    );
+  }
+}
+
 // --- Tool definitions for the Anthropic API ---
 
 const tools: Anthropic.Tool[] = [
@@ -137,7 +149,7 @@ async function executeReadFile(
   filePath: string
 ): Promise<{ output: string; isError: boolean }> {
   try {
-    const content = fs.readFileSync(filePath, "utf-8");
+    const content = await fs.promises.readFile(filePath, "utf-8");
     return { output: content, isError: false };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -151,8 +163,8 @@ async function executeWriteFile(
 ): Promise<{ output: string; isError: boolean }> {
   try {
     const dir = path.dirname(filePath);
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(filePath, content, "utf-8");
+    await fs.promises.mkdir(dir, { recursive: true });
+    await fs.promises.writeFile(filePath, content, "utf-8");
     return { output: `Successfully wrote to ${filePath}`, isError: false };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -166,7 +178,7 @@ async function executeEditFile(
   newString: string
 ): Promise<{ output: string; isError: boolean }> {
   try {
-    const content = fs.readFileSync(filePath, "utf-8");
+    const content = await fs.promises.readFile(filePath, "utf-8");
     const occurrences = content.split(oldString).length - 1;
 
     if (occurrences === 0) {
@@ -183,7 +195,7 @@ async function executeEditFile(
     }
 
     const newContent = content.replace(oldString, newString);
-    fs.writeFileSync(filePath, newContent, "utf-8");
+    await fs.promises.writeFile(filePath, newContent, "utf-8");
     return {
       output: `Successfully edited ${filePath}`,
       isError: false,
@@ -198,6 +210,7 @@ async function executeBash(
   command: string,
   cwd: string
 ): Promise<{ output: string; exitCode: number; isError: boolean }> {
+  // TODO: Add sandboxing for production (e.g., restrict commands, use containers)
   try {
     const { stdout, stderr } = await execAsync(command, {
       cwd,
@@ -224,33 +237,110 @@ async function executeBash(
   }
 }
 
+// Directories to skip when globbing
+const GLOB_SKIP_DIRS = new Set([
+  "node_modules",
+  ".git",
+  ".next",
+  "dist",
+  "build",
+]);
+
+/**
+ * Simple glob pattern matching against a file path.
+ * Supports *, **, and ? wildcards.
+ */
+function matchGlobPattern(pattern: string, filePath: string): boolean {
+  // Convert glob pattern to regex
+  let regexStr = "^";
+  let i = 0;
+  while (i < pattern.length) {
+    const ch = pattern[i];
+    if (ch === "*") {
+      if (pattern[i + 1] === "*") {
+        // ** matches any number of directories
+        if (pattern[i + 2] === "/") {
+          regexStr += "(?:.+/)?";
+          i += 3;
+        } else {
+          regexStr += ".*";
+          i += 2;
+        }
+      } else {
+        // * matches anything except /
+        regexStr += "[^/]*";
+        i++;
+      }
+    } else if (ch === "?") {
+      regexStr += "[^/]";
+      i++;
+    } else if (ch === ".") {
+      regexStr += "\\.";
+      i++;
+    } else {
+      regexStr += ch;
+      i++;
+    }
+  }
+  regexStr += "$";
+  return new RegExp(regexStr).test(filePath);
+}
+
+/**
+ * Recursively reads a directory and returns file paths matching a glob pattern.
+ * Does not shell out — uses Node's fs API directly to avoid command injection.
+ */
+async function walkDir(
+  dir: string,
+  baseDir: string,
+  maxResults: number
+): Promise<string[]> {
+  const results: string[] = [];
+
+  async function walk(currentDir: string): Promise<void> {
+    if (results.length >= maxResults) return;
+
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (results.length >= maxResults) return;
+
+      if (entry.isDirectory()) {
+        if (GLOB_SKIP_DIRS.has(entry.name)) continue;
+        await walk(path.join(currentDir, entry.name));
+      } else if (entry.isFile()) {
+        const fullPath = path.join(currentDir, entry.name);
+        const relativePath = path.relative(baseDir, fullPath);
+        results.push(relativePath);
+      }
+    }
+  }
+
+  await walk(dir);
+  return results;
+}
+
 async function executeGlob(
   pattern: string,
   directory: string
 ): Promise<{ output: string; isError: boolean }> {
   try {
-    // Use find + shell globbing via bash to match files
-    // Escape single quotes in the directory path
-    const safeDir = directory.replace(/'/g, "'\\''");
-    // Use a subshell with shopt -s globstar for ** support
-    const cmd = `cd '${safeDir}' && shopt -s globstar nullglob && for f in ${pattern}; do echo "$f"; done | grep -v -E '^(node_modules|\.git|\.next|dist|build)/' | head -500`;
-    const { stdout } = await execAsync(cmd, {
-      shell: "/bin/bash",
-      timeout: 15000,
-      maxBuffer: 5 * 1024 * 1024,
-    });
-    const trimmed = stdout.trim();
-    if (!trimmed) {
+    const resolvedDir = path.resolve(directory);
+    const allFiles = await walkDir(resolvedDir, resolvedDir, 10000);
+    const matched = allFiles.filter((f) => matchGlobPattern(pattern, f));
+    const limited = matched.slice(0, 500);
+
+    if (limited.length === 0) {
       return { output: "No files found matching the pattern.", isError: false };
     }
-    return { output: trimmed, isError: false };
+    return { output: limited.join("\n"), isError: false };
   } catch (err: unknown) {
-    const execErr = err as { stdout?: string; message?: string };
-    const stdout = execErr.stdout?.trim();
-    if (stdout) {
-      return { output: stdout, isError: false };
-    }
-    const message = execErr.message || String(err);
+    const message = err instanceof Error ? err.message : String(err);
     return { output: `Error running glob: ${message}`, isError: true };
   }
 }
@@ -261,8 +351,13 @@ async function executeGrep(
   include?: string
 ): Promise<{ output: string; isError: boolean }> {
   try {
+    // Escape single quotes in all user-provided parameters
+    const safePattern = pattern.replace(/'/g, "'\\''");
+    const safePath = searchPath.replace(/'/g, "'\\''");
+    const safeInclude = (include || "*").replace(/'/g, "'\\''");
+
     // Use grep -rn for recursive search with line numbers
-    let cmd = `grep -rn --include='${include || "*"}' -E '${pattern.replace(/'/g, "'\\''")}' '${searchPath.replace(/'/g, "'\\''")}'`;
+    let cmd = `grep -rn --include='${safeInclude}' -E '${safePattern}' '${safePath}'`;
     // Exclude common directories
     cmd += " --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.next --exclude-dir=dist --exclude-dir=build";
     // Limit output to avoid overwhelming results
@@ -292,23 +387,30 @@ async function executeTool(
   projectPath: string
 ): Promise<{ output: string; isError: boolean; exitCode?: number }> {
   switch (toolName) {
-    case "read_file":
-      return executeReadFile(toolInput.file_path as string);
+    case "read_file": {
+      const filePath = toolInput.file_path as string;
+      validatePath(filePath, projectPath);
+      return executeReadFile(filePath);
+    }
 
-    case "write_file":
-      return executeWriteFile(
-        toolInput.file_path as string,
-        toolInput.content as string
-      );
+    case "write_file": {
+      const filePath = toolInput.file_path as string;
+      validatePath(filePath, projectPath);
+      return executeWriteFile(filePath, toolInput.content as string);
+    }
 
-    case "edit_file":
+    case "edit_file": {
+      const filePath = toolInput.file_path as string;
+      validatePath(filePath, projectPath);
       return executeEditFile(
-        toolInput.file_path as string,
+        filePath,
         toolInput.old_string as string,
         toolInput.new_string as string
       );
+    }
 
     case "bash":
+      // TODO: Add sandboxing for production (e.g., restrict commands, use containers)
       return executeBash(toolInput.command as string, projectPath);
 
     case "glob":
@@ -404,43 +506,15 @@ export async function* runAgent(
       name: string;
       input: Record<string, unknown>;
     }[] = [];
-    // Accumulate tool input JSON strings by index
-    const toolInputJsonByIndex: Map<number, string> = new Map();
-    let currentBlockIndex = -1;
-    let currentBlockType: "text" | "tool_use" | null = null;
 
     for await (const event of stream) {
-      if (event.type === "content_block_start") {
-        currentBlockIndex = event.index;
-        if (event.content_block.type === "text") {
-          currentBlockType = "text";
-        } else if (event.content_block.type === "tool_use") {
-          currentBlockType = "tool_use";
-          toolInputJsonByIndex.set(currentBlockIndex, "");
-          // We'll emit tool_start when we have the full input after the block stops
-        }
-      } else if (event.type === "content_block_delta") {
-        if (
-          event.delta.type === "text_delta" &&
-          currentBlockType === "text"
-        ) {
+      if (event.type === "content_block_delta") {
+        if (event.delta.type === "text_delta") {
           yield {
             type: "text",
             data: { delta: event.delta.text, messageId },
           };
-        } else if (
-          event.delta.type === "input_json_delta" &&
-          currentBlockType === "tool_use"
-        ) {
-          const existing =
-            toolInputJsonByIndex.get(currentBlockIndex) || "";
-          toolInputJsonByIndex.set(
-            currentBlockIndex,
-            existing + event.delta.partial_json
-          );
         }
-      } else if (event.type === "content_block_stop") {
-        currentBlockType = null;
       }
     }
 

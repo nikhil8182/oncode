@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
+import { formatRelativeTime } from "@/lib/utils";
 import type { Conversation } from "@/types";
 
 interface ConversationHistoryProps {
@@ -8,36 +9,6 @@ interface ConversationHistoryProps {
   activeId: string | null;
   onSelect: (id: string) => void;
   onNew: () => void;
-}
-
-function formatTimestamp(ts: number): string {
-  const now = Date.now();
-  const diff = now - ts;
-
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return "just now";
-
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-
-  const days = Math.floor(hours / 24);
-  if (days === 1) return "Yesterday";
-
-  const date = new Date(ts);
-  const nowDate = new Date(now);
-
-  if (date.getFullYear() === nowDate.getFullYear()) {
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  }
-
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 function truncate(text: string, max: number): string {
@@ -64,29 +35,8 @@ export default function ConversationHistory({
   onNew,
 }: ConversationHistoryProps) {
   return (
-    <div
-      style={{
-        background: "#0f0f0f",
-        borderRadius: 8,
-        border: "1px solid #1a1a1a",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-      }}
-    >
-      <div
-        style={{
-          padding: "10px 12px 6px",
-          fontSize: 10,
-          fontWeight: 600,
-          letterSpacing: "0.08em",
-          color: "#555",
-          textTransform: "uppercase",
-        }}
-      >
-        History
-      </div>
+    <div className="panel-card">
+      <div className="panel-card-header">History</div>
       {/* New Chat button */}
       <div style={{ padding: "4px 8px 8px" }}>
         <button
@@ -99,16 +49,16 @@ export default function ConversationHistory({
             justifyContent: "center",
             gap: 6,
             background: "transparent",
-            border: "1px solid #0d9488",
-            borderRadius: 6,
-            color: "#0d9488",
+            border: "1px solid var(--accent)",
+            borderRadius: "var(--radius-md)",
+            color: "var(--accent)",
             fontSize: 13,
             fontWeight: 500,
             cursor: "pointer",
             transition: "background 0.15s",
           }}
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = "#0d948815";
+            (e.currentTarget as HTMLButtonElement).style.background = "var(--accent-dim)";
           }}
           onMouseLeave={(e) => {
             (e.currentTarget as HTMLButtonElement).style.background = "transparent";
@@ -127,16 +77,7 @@ export default function ConversationHistory({
         }}
       >
         {conversations.length === 0 ? (
-          <div
-            style={{
-              padding: "20px 12px",
-              fontSize: 13,
-              color: "#555",
-              textAlign: "center",
-            }}
-          >
-            No conversations yet
-          </div>
+          <div className="panel-empty">No conversations yet</div>
         ) : (
           conversations.map((conv) => {
             const isActive = conv.id === activeId;
@@ -145,6 +86,7 @@ export default function ConversationHistory({
                 key={conv.id}
                 role="button"
                 tabIndex={0}
+                className="list-item"
                 onClick={() => onSelect(conv.id)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
@@ -156,30 +98,16 @@ export default function ConversationHistory({
                   display: "flex",
                   flexDirection: "column",
                   padding: "8px 12px",
-                  cursor: "pointer",
-                  background: isActive ? "#111" : "transparent",
+                  background: isActive ? "var(--surface-alt)" : undefined,
                   borderLeft: isActive
-                    ? "2px solid #0d9488"
+                    ? "2px solid var(--accent)"
                     : "2px solid transparent",
-                  transition: "background 0.1s",
-                  userSelect: "none",
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    (e.currentTarget as HTMLDivElement).style.background = "#0a0a0a";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    (e.currentTarget as HTMLDivElement).style.background =
-                      "transparent";
-                  }
                 }}
               >
                 <span
                   style={{
                     fontSize: 13,
-                    color: isActive ? "#ccc" : "#888",
+                    color: isActive ? "var(--text)" : "var(--text-muted)",
                     whiteSpace: "nowrap",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -191,12 +119,12 @@ export default function ConversationHistory({
                 <span
                   style={{
                     fontSize: 11,
-                    color: "#555",
+                    color: "var(--text-dim)",
                     marginTop: 2,
                     lineHeight: "14px",
                   }}
                 >
-                  {formatTimestamp(conv.updatedAt)}
+                  {formatRelativeTime(conv.updatedAt)}
                 </span>
               </div>
             );

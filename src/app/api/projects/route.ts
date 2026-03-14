@@ -16,7 +16,7 @@ const PROJECT_MARKERS = [
 export async function GET() {
   try {
     const homeDir = os.homedir();
-    const entries = fs.readdirSync(homeDir, { withFileTypes: true });
+    const entries = await fs.promises.readdir(homeDir, { withFileTypes: true });
 
     const projects: (Project & { mtime: number })[] = [];
 
@@ -28,17 +28,19 @@ export async function GET() {
       const dirPath = path.join(homeDir, entry.name);
 
       try {
-        const hasMarker = PROJECT_MARKERS.some((marker) => {
+        let hasMarker = false;
+        for (const marker of PROJECT_MARKERS) {
           try {
-            fs.accessSync(path.join(dirPath, marker));
-            return true;
+            await fs.promises.access(path.join(dirPath, marker));
+            hasMarker = true;
+            break;
           } catch {
-            return false;
+            // marker not found, continue
           }
-        });
+        }
 
         if (hasMarker) {
-          const stats = fs.statSync(dirPath);
+          const stats = await fs.promises.stat(dirPath);
           projects.push({
             name: entry.name,
             path: dirPath,
